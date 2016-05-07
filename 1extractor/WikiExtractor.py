@@ -1,12 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env pypy
 # -*- coding: utf-8 -*-
-
-"""
-Wiki Extractor
-
-@ Fork From https://github.com/attardi/wikiextractor - Giuseppe Attardi
-@ Modified https://github.com/n00b-coding/wikiextractor - n00b-coding
-"""
 
 import sys
 import argparse
@@ -28,7 +21,7 @@ from timeit import default_timer
 # ===========================================================================
 
 # Program version
-version = '2.51M'
+version = '2.55'
 
 ## PARAMS ####################################################################
 
@@ -365,7 +358,7 @@ class Extractor(object):
     keepLinks = False
 
     ##
-    # Whether to preserve section titles (unused)
+    # Whether to preserve section titles
     keepSections = True
 
     ##
@@ -403,6 +396,7 @@ class Extractor(object):
         """
         logging.debug("%s\t%s", self.id, self.title)
         url = get_url(self.id)
+        header = '=========================================\n'
         # Separate header from text with a newline.
         header += self.title + '\n\n'
         header = header.encode('utf-8')
@@ -414,7 +408,7 @@ class Extractor(object):
         self.magicWords['currenthour'] = time.strftime('%H')
         self.magicWords['currenttime'] = time.strftime('%H:%M:%S')
         text = self.clean()
-        footer = "\n==========\n"
+        footer = "\n=========================================\n"
         out.write(header)
         for line in compact(text):
             out.write(line.encode('utf-8'))
@@ -461,9 +455,8 @@ class Extractor(object):
         res = ''
         cur = 0
         for m in syntaxhighlight.finditer(text):
-            end = m.end()
             res += unescape(text[cur:m.start()]) + m.group(1)
-            cur = end
+            cur = m.end()
         text = res + unescape(text[cur:])
 
         # Handle bold/italic/quote
@@ -991,7 +984,7 @@ def findMatchingBraces(text, ldelim=0):
                 cur = end
 
 
-def findBalanced(text, openDelim, closeDelim):
+def findBalanced(text, openDelim=['[['], closeDelim=[']]']):
     """
     Assuming that text contains a properly balanced expression using
     :param openDelim: as opening delimiters and
@@ -1669,7 +1662,7 @@ def replaceInternalLinks(text):
     # triple closing ]]].
     cur = 0
     res = ''
-    for s, e in findBalanced(text, ('[['), (']]')):
+    for s, e in findBalanced(text):
         m = tailRE.match(text, e)
         if m:
             trail = m.group(0)
@@ -1687,7 +1680,7 @@ def replaceInternalLinks(text):
             title = inner[:pipe].rstrip()
             # find last |
             curp = pipe + 1
-            for s1, e1 in findBalanced(inner, ('[['), (']]')):
+            for s1, e1 in findBalanced(inner):
                 last = inner.rfind('|', curp, s1)
                 if last >= 0:
                     pipe = last  # advance
@@ -1997,9 +1990,14 @@ wgUrlProtocols = [
 # \p{Zs} is unicode 'separator, space' category. It covers the space 0x20
 # as well as U+3000 is IDEOGRAPHIC SPACE for bug 19052
 EXT_LINK_URL_CLASS = r'[^][<>"\x00-\x20\x7F\s]'
+ANCHOR_CLASS = r'[^][\x00-\x08\x0a-\x1F]'
 ExtLinkBracketedRegex = re.compile(
-    '\[(((?i)' + '|'.join(wgUrlProtocols) + ')' + EXT_LINK_URL_CLASS + r'+)\s*([^\]\x00-\x08\x0a-\x1F]*?)\]',
+    '\[(((?i)' + '|'.join(wgUrlProtocols) + ')' + EXT_LINK_URL_CLASS + r'+)' +
+    r'\s*((?:' + ANCHOR_CLASS + r'|\[\[' + ANCHOR_CLASS + r'+\]\])' + r'*?)\]',
     re.S | re.U)
+# A simpler alternative:
+# ExtLinkBracketedRegex = re.compile(r'\[(.*?)\](?!])')
+
 EXT_IMAGE_REGEX = re.compile(
     r"""^(http://|https://)([^][<>"\x00-\x20\x7F\s]+)
     /([A-Za-z0-9_.,~%\-+&;#*?!=()@\x80-\xFF]+)\.((?i)gif|png|jpg|jpeg)$""",
@@ -2144,12 +2142,18 @@ def compact(text):
             n = line[i - 1]  # last list char
             line = line[i:].strip()
             if line:  # FIXME: n is '"'
-                if Extractor.toHTML:
-                    page.append(listItem[n] % line)
-                elif Extractor.keepLists:
+                if Extractor.keepLists:
+                    # emit open sections
+                    items = headers.items()
+                    items.sort()
+                    for i, v in items:
+                        page.append(v)
+                    headers.clear()
                     # FIXME: use item count for #-lines
                     bullet = '1. ' if n == '#' else '- '
                     page.append('{0:{1}s}'.format(bullet, len(listLevel)) + line)
+                elif Extractor.toHTML:
+                    page.append(listItem[n] % line)
         elif len(listLevel):
             page.append(line)
             if Extractor.toHTML:
@@ -2197,22 +2201,23 @@ class NextFile(object):
 
     def __init__(self, path_name):
         self.path_name = path_name
-        self.file_index = 0
+        self.dir_index = -1
+        self.file_index = -1
 
     def next(self):
-        self.file_index = (self.file_index + 1)
+        self.file_index = self.file_index + 1
+        if self.file_index == 0:
+            self.dir_index += 1
         dirname = self._dirname()
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         return self._filepath()
 
     def _dirname(self):
-        #char1 = self.dir_index % 26
-        #char2 = self.dir_index / 26 % 26
         return os.path.join(self.path_name)
 
     def _filepath(self):
-        return '%s/wiki_%003d' % (self._dirname(), self.file_index)
+        return '%s/extract_%01d' % (self._dirname(), self.file_index)
 
 
 class OutputSplitter(object):
@@ -2405,19 +2410,20 @@ def process_dump(input_file, template_file, out_file, file_size, file_compress,
     if Extractor.expand_templates:
         # preprocess
         template_load_start = default_timer()
-        if template_file and os.path.exists(template_file):
-            logging.info("Preprocessing '%s' to collect template definitions: this may take some time.", template_file)
-            file = fileinput.FileInput(template_file, openhook=fileinput.hook_compressed)
-            load_templates(file)
-            file.close()
-        else:
-            if input_file == '-':
-                # can't scan then reset stdin; must error w/ suggestion to specify template_file
-                raise ValueError("to use templates with stdin dump, must supply explicit template-file")
-            logging.info("Preprocessing '%s' to collect template definitions: this may take some time.", input_file)
-            load_templates(input, template_file)
-            input.close()
-            input = fileinput.FileInput(input_file, openhook=fileinput.hook_compressed)
+        if template_file:
+            if os.path.exists(template_file):
+                logging.info("Preprocessing '%s' to collect template definitions: this may take some time.", template_file)
+                file = fileinput.FileInput(template_file, openhook=fileinput.hook_compressed)
+                load_templates(file)
+                file.close()
+            else:
+                if input_file == '-':
+                    # can't scan then reset stdin; must error w/ suggestion to specify template_file
+                    raise ValueError("to use templates with stdin dump, must supply explicit template-file")
+                logging.info("Preprocessing '%s' to collect template definitions: this may take some time.", input_file)
+                load_templates(input, template_file)
+                input.close()
+                input = fileinput.FileInput(input_file, openhook=fileinput.hook_compressed)
         template_load_elapsed = default_timer() - template_load_start
         logging.info("Loaded %d templates in %.1fs", len(templates), template_load_elapsed)
 
@@ -2469,6 +2475,7 @@ def process_dump(input_file, template_file, out_file, file_size, file_compress,
             # slow down
             delay = 0
             if spool_length.value > max_spool_length:
+                # reduce to 10%
                 while spool_length.value > max_spool_length/10:
                     time.sleep(10)
                     delay += 10
@@ -2548,7 +2555,7 @@ def reduce_process(output_queue, spool_length,
         output = sys.stdout
         if file_compress:
             logging.warn("writing to stdout, so no output compression (use an external tool)")
-    
+
     interval_start = default_timer()
     # FIXME: use a heap
     spool = {}        # collected pages
@@ -2599,9 +2606,9 @@ def main():
     parser.add_argument("input",
                         help="XML wiki dump file")
     groupO = parser.add_argument_group('Output')
-    groupO.add_argument("-o", "--output", default="output",
+    groupO.add_argument("-o", "--output", default="text",
                         help="directory for extracted files (or '-' for dumping to stdout)")
-    groupO.add_argument("-b", "--bytes", default="100M",
+    groupO.add_argument("-b", "--bytes", default="1M",
                         help="maximum bytes per output file (default %(default)s)",
                         metavar="n[KMG]")
     groupO.add_argument("-c", "--compress", action="store_true",
@@ -2612,6 +2619,8 @@ def main():
                         help="produce HTML output, subsumes --links")
     groupP.add_argument("-l", "--links", action="store_true",
                         help="preserve links")
+    groupP.add_argument("-s", "--sections", action="store_true",
+                        help="preserve sections")
     groupP.add_argument("--lists", action="store_true",
                         help="preserve lists")
     groupP.add_argument("-ns", "--namespaces", default="", metavar="ns1,ns2",
@@ -2640,6 +2649,7 @@ def main():
     args = parser.parse_args()
 
     Extractor.keepLinks = args.links
+    Extractor.keepSections = args.sections
     Extractor.keepLists = args.lists
     Extractor.toHTML = args.html
     if args.html:
