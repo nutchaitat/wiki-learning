@@ -396,7 +396,7 @@ class Extractor(object):
         """
         logging.debug("%s\t%s", self.id, self.title)
         url = get_url(self.id)
-        header = '=========================================\n'
+        header = ''
         # Separate header from text with a newline.
         header += self.title + '\n\n'
         header = header.encode('utf-8')
@@ -408,7 +408,7 @@ class Extractor(object):
         self.magicWords['currenthour'] = time.strftime('%H')
         self.magicWords['currenttime'] = time.strftime('%H:%M:%S')
         text = self.clean()
-        footer = "\n=========================================\n"
+        footer = "\n\n"
         out.write(header)
         for line in compact(text):
             out.write(line.encode('utf-8'))
@@ -2205,19 +2205,13 @@ class NextFile(object):
         self.file_index = -1
 
     def next(self):
-        self.file_index = self.file_index + 1
-        if self.file_index == 0:
-            self.dir_index += 1
-        dirname = self._dirname()
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
         return self._filepath()
 
     def _dirname(self):
         return os.path.join(self.path_name)
 
     def _filepath(self):
-        return '%s/extract_%01d' % (self._dirname(), self.file_index)
+        return '%s' % (self._dirname())
 
 
 class OutputSplitter(object):
@@ -2608,12 +2602,11 @@ def main():
     groupO = parser.add_argument_group('Output')
     groupO.add_argument("-o", "--output", default="text",
                         help="directory for extracted files (or '-' for dumping to stdout)")
-    groupO.add_argument("-b", "--bytes", default="1M",
-                        help="maximum bytes per output file (default %(default)s)",
-                        metavar="n[KMG]")
     groupO.add_argument("-c", "--compress", action="store_true",
                         help="compress output files using bzip")
-
+    groupO.add_argument("-b", "--bytes", default="100000000000M",
+                        help="maximum bytes per output file (default %(default)s)",
+                        metavar="n[KMG]")
     groupP = parser.add_argument_group('Processing')
     groupP.add_argument("--html", action="store_true",
                         help="produce HTML output, subsumes --links")
@@ -2702,12 +2695,12 @@ def main():
         return
 
     output_path = args.output
-    if output_path != '-' and not os.path.isdir(output_path):
-        try:
-            os.makedirs(output_path)
-        except:
-            logging.error('Could not create: %s', output_path)
-            return
+    # if output_path != '-' and not os.path.isdir(output_path):
+    #     try:
+    #         os.makedirs(output_path)
+    #     except:
+    #         logging.error('Could not create: %s', output_path)
+    #         return
 
     process_dump(input_file, args.templates, output_path, file_size,
                  args.compress, args.processes)

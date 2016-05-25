@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
-
-os.system("./1extractor/WikiExtractor.py ./source/#origin/origin.xml -o source/1extracted/ -b 100M") # 1.Extractor Source
+os.system("./1extractor/WikiExtractor.py ./source/#origin/origin.xml -o ./source/1extracted/output.txt") # 1.Extractor Source
+os.system("./1extractor/WikiExtractor.py ./source/#origin/origin.xml -o ./source/1extracted/output.txt") # 2.Tokenizer Source
