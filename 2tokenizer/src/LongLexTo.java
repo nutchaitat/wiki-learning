@@ -110,7 +110,6 @@ public class LongLexTo {
   /**************************** addDict ******************************/
   /*******************************************************************/
   public void addDict(File dictFile) throws IOException {
-
     //Read words from dictionary
     String line, word, word2;
     int index;
@@ -251,7 +250,16 @@ public class LongLexTo {
   /****************************************************************/
   public static void main(String[] args) throws IOException {
 
-    LongLexTo tokenizer=new LongLexTo(new File("Vocabulary.txt"));
+    String str_VocabFile = args[0];
+    String str_InFile = args[1];
+    String str_OutFile = args[2];
+
+    System.out.println(str_VocabFile);
+    System.out.println(str_InFile);
+    System.out.println(str_OutFile);
+
+
+    LongLexTo tokenizer=new LongLexTo(new File(str_VocabFile));
     File unknownFile=new File("unknown.txt");
     if(unknownFile.exists())
       tokenizer.addDict(unknownFile);
@@ -272,12 +280,12 @@ public class LongLexTo {
     System.out.println("*******************************");
 
       //Get input file name
-      System.out.println("\n Input file : " + args[0]);
-      inFile=new File(args[0]);
+      System.out.println("\n Input file : " + str_InFile);
+      inFile=new File(str_InFile);
 
       //Get output file name
-      System.out.println("\n Output file: " + args[1]);
-      outFile=new File(args[1]);
+      System.out.println("\n Output file: " + str_OutFile);
+      outFile=new File(str_OutFile);
 
       fr=new FileReader(inFile);
       br=new BufferedReader(fr);

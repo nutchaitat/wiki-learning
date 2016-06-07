@@ -182,7 +182,7 @@ def unescape(text):
                 return unichr(name2codepoint[code])
         except:
             return text  # leave as is
-
+            
     return re.sub("&#?(\w+);", fixup, text)
 
 
